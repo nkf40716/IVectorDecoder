@@ -7,8 +7,10 @@
 #include "FloatModel.h"
 #include "FeaturePool.h"
 
-#define k_nTvDim		100
-#define k_nTrainIter	5
+#define SAFE_DELETE_ARR(x)	if ((x) != NULL) {delete [] (x); x = NULL;}
+#define PRINT(STH)			printf("%s\n", #STH)
+#define k_nTvDim			100
+#define k_nTrainIter		5
 
 int LoadBin(char fname[], char bin[])
 {
@@ -35,22 +37,46 @@ int LoadBin(char fname[], char bin[])
 	return size;
 }
 
+int LoadTV(char fname[], double tv[], int nTvSize)
+{
+	int n = LoadBin(fname, NULL);
+	if ( n != (nTvSize << 2) ) {
+		PRINT(Load TV failed ! Size not match);
+		exit(-1);
+	}
+
+	n /= sizeof(float);
+	float *T = new float [n];
+	LoadBin(fname, (char *)T);
+
+	for (int i = 0; i < n; ++i)
+		tv[i] = T[i];
+		
+	SAFE_DELETE_ARR(T);
+	return 0;
+}
+
 GMMDATA *InitGmmData(char *lpszGMM)
 {
 	int i, j, n, pos, nDim, nGauss;
-	GMMDATA *pGMMDATA = (GMMDATA *)malloc(sizeof(GMMDATA));
+	GMMDATA *pGMMDATA = NULL;
 
 	n = LoadBin(lpszGMM, NULL);
-	if (n <= 0) return NULL;
 	char *lpbyGMM = (char *)malloc(sizeof(char) * n);
 	LoadBin(lpszGMM, lpbyGMM);
 
 	float *m, *v, *state;
 	HANDLE hUBM = InitModelTable((float *)lpbyGMM);
+	if (!hUBM) {
+		printf("ERROR : Init Model Table failed !\n");
+		SAFE_FREE(lpbyGMM);
+		exit(-1);
+	}
  	nDim = GetDim(hUBM);
 	state = GetState(hUBM, 1);
 	nGauss = (int)state[0];
 
+	pGMMDATA = (GMMDATA *)malloc(sizeof(GMMDATA));
 	float *gmm_mempool = (float *)malloc((sizeof(float) * nGauss * nDim) * 2 + (sizeof(float) * nGauss));
 	float **mu = (float **)malloc(sizeof(float *) * nGauss);
 	float **sigma = (float **)malloc(sizeof(float *) * nGauss);
@@ -70,7 +96,7 @@ GMMDATA *InitGmmData(char *lpszGMM)
 		}
 	}	
 	ReleaseModelTable(hUBM);
-	free(lpbyGMM);
+	SAFE_FREE(lpbyGMM);
 
 	pGMMDATA->m_nDim = nDim;
 	pGMMDATA->m_nNumGMMGauss = nGauss;
@@ -112,196 +138,137 @@ static int DumpBin(char *lpszFile, char *lpbyBin, int nBinSize)
 	return nBinSize;
 }
 
-static int DumpIvBin(char *lpszFile, char *lpbyBin, int nBinSize, int tv_dim, int nUttr)
+static inline PrintUsage()
 {
-	FILE *fp;
-
-	if (lpbyBin == NULL || nBinSize <= 0)
-		return -1;
-
-	if ((fp = fopen((char *)lpszFile, "wb")) == NULL)
-		return -1;
-
-	fwrite(&tv_dim, 1, sizeof(int), fp);
-	fwrite(&nUttr, 1, sizeof(int), fp);
-
-	if ((int)fwrite(lpbyBin, 1, nBinSize, fp) != nBinSize) {
-		fclose(fp);
-		unlink(lpszFile);
-		return -1;
-	}
-	fclose(fp);
-
-	return nBinSize + sizeof(int) + sizeof(int);
+	PRINT(-tv for Training Total Variability or -iv for extract I-vector.);
+	PRINT(Usage: IvDecoder.exe -tv <UBM> <FeaturePool> <out>);
+	PRINT(or\n\tIvDecoder.exe -iv <UBM> <FeaturePool> <TV> <TrainUttr> <out>);
 }
 
 int main(int argc, char* argv[])
 {
-	if (argc < 4) {
-		printf("Usage: %s <UBM> <FeaturePool> [testgmm file]\n", argv[0]);
-		exit(-1);
-	}
-
-	/*
-	int i, j, n, r;
-	FILE *fp = fopen(argv[3], "r");
-	if (fp == NULL) {
-		printf("ERROR: open file failed. [%s]\n", argv[1]);
+	if (argc < 5) {
+		PrintUsage();
 		exit(-1);
 	}
 	
-	const int nMixtures = 32;
-	const int nDim      = 13;
-	const int nFrames   = 1000;
-
-	char ctmp[64];
-	GMMDATA *pUbmData = (GMMDATA *)malloc(sizeof(GMMDATA));
-	float *data = (float *)malloc(sizeof(float) * nFrames * nDim);
-	float *gmm_mempool = (float *)malloc((sizeof(float) * nMixtures * nDim) * 2 + (sizeof(float) * nMixtures));
-	float **mu = (float **)malloc(sizeof(float *) * nMixtures);
-	float **sigma = (float **)malloc(sizeof(float *) * nMixtures);
-	float *logw = &gmm_mempool[nMixtures * nDim * 2];
-	int pos = nMixtures * nDim;
-
-	for (i = 0; i < nMixtures; ++i) {
-		mu[i] = &gmm_mempool[i * nDim];
-		sigma[i] = &gmm_mempool[pos + i * nDim];
-	}
-
-	for (i = 0; i < nMixtures; ++i) {
-		fscanf(fp, "%s", ctmp);
-		logw[i] = (float)log(atof(ctmp));
-	}
-	
-	for (i = 0; i < nDim; ++i) {
-		for (j = 0; j < nMixtures; ++j) {
-			fscanf(fp, "%s", ctmp);
-			mu[j][i] = (float)atof(ctmp);
-		}
-	}
-	
-	for (i = 0; i < nDim; ++i) {
-		for (j = 0; j < nMixtures; ++j) {
-			fscanf(fp, "%s", ctmp);
-			sigma[j][i] = (float)atof(ctmp);
-		}
-	}
-
-	n = 0;
-	for (i = 0; i < nFrames; ++i) {
-		for (j = 0; j < nDim; ++j)
-			data[n++] = (float)(i + j + 2) / 100;
-	}
-	fclose(fp);
-
-	pUbmData->m_nDim = nDim;
-	pUbmData->m_nNumGMMGauss = nMixtures;
-	pUbmData->m_pfMemPool = gmm_mempool;
-	pUbmData->m_ppfMeans = mu;
-	pUbmData->m_ppfSigma = sigma;
-	pUbmData->m_pfLogW = logw;
-
-	const int nUttr = 1;
-	const int k_nTvDim = 100;
-	const int k_nTrainIter = 5;
-	
-	float *T = (float *)malloc(sizeof(float) * tv_dim * nMixtures * nDim);
-	float *iv_mem = (float *)malloc(sizeof(float) * tv_dim * nUttr);
-	float **iv = (float **)malloc(sizeof(float *) * nUttr);
-	float **NF = (float **)malloc(sizeof(float *) * nUttr);
-	for (i = 0; i < nUttr; ++i) {
-		NF[i] = (float *)malloc(sizeof(float) * (nMixtures + nMixtures * nDim));
-		r = compute_bw_stats_float(data, 1000, pUbmData, NF[i]);
-	}
-
- 	TrainTVSpace(pUbmData, NF, nUttr, tv_dim, nIter, T);
-
-	for (i = 0; i < nUttr; ++i)
+	BOOL bTrainTv = FALSE;
+	LoadBin(argv[2], NULL);
+	if (strcmp(argv[1], "-tv") == 0) 
 	{
-		iv[i] = &iv_mem[i * tv_dim];
-		ExtractIVector(pUbmData, NF[i], tv_dim, T, iv[i]);
+		bTrainTv = TRUE;
 	}
-	
-	for (i = 0; i < nUttr; ++i)
-		SAFE_FREE(NF[i]);
-	SAFE_FREE(NF);	
-	SAFE_FREE(iv_mem);
-	SAFE_FREE(iv);
-	SAFE_FREE(T);
-	SAFE_FREE(pUbmData);
-	SAFE_FREE(data);
-	SAFE_FREE(gmm_mempool);
-	SAFE_FREE(mu);
-	SAFE_FREE(sigma);
-	return 0;
-	*/
-
-	// Test LoadUBM Code
-
-	int i, n, r;
-	class FeaturePool *poFPool = new FeaturePool(argv[2]);
+	else if (strcmp(argv[1], "-iv") == 0) 
+	{
+		if (argc < 7) 
+		{
+			PrintUsage();
+			exit(-1);
+		}
+		LoadBin(argv[4], NULL);
+	}
+	else 
+	{
+		printf("Error: Illegal Parameter [%s]\n", argv[1]);
+		PrintUsage();
+		exit(-1);
+	}
+		
+	int i, j, n, r;
+	class FeaturePool *poFPool = new FeaturePool(argv[3]);
 	int nUttr = poFPool->GetNumUtterance();
 	if (nUttr <= 0) 
 	{
-		printf("Init feature pool failed.\n");
+		PRINT(Init feature pool failed !);
+		SAFE_DELETE(poFPool);
 		exit(-1);
 	}
+
 	int nDim = poFPool->GetDim();	
-	int nMaxVector = 0;
-	for (i = 0; i < nUttr; ++i) 
+	int nMaxVector = poFPool->GetNumVector(0);
+	for (i = 1; i < nUttr; ++i) 
 	{	
 		n = poFPool->GetNumVector(i);
 		if (n > nMaxVector) nMaxVector = n;
 	}
-	
-	char *fea = (char *)malloc(sizeof(char) * nMaxVector * nDim);
-	
-	GMMDATA *pUbmData = InitGmmData(argv[1]);
-	int nMixtures = pUbmData->m_nNumGMMGauss;
+		
+	GMMDATA *pUbmData = InitGmmData(argv[2]);
+	const int nMixtures = pUbmData->m_nNumGMMGauss;
 	const int tv_dim = k_nTvDim;
 	const int nIter = k_nTrainIter;
+	const int nNFSize = nMixtures + nMixtures * nDim;
+	const int nTvSize = tv_dim * nMixtures * nDim;
 
-	float *T = (float *)malloc(sizeof(float) * tv_dim * nMixtures * nDim);
-	float *iv_mem = (float *)malloc(sizeof(float) * tv_dim * nUttr);
-	float **iv = (float **)malloc(sizeof(float *) * nUttr);
-	float **NF = (float **)malloc(sizeof(float *) * nUttr);
+	char *fea = new char [nMaxVector * nDim];
+	double nStart, nEnd;
+	double *T = NULL;
+	double **NF = new double* [2];
+	NF[0] = new double [nNFSize], NF[1] = new double [nNFSize];
+
+	memset(NF[0], 0, sizeof(double) * nNFSize);	
+	nStart = clock();
+
+	if (bTrainTv == FALSE) nUttr = atoi(argv[5]);
 	for (i = 0; i < nUttr; ++i) 
 	{
 		n = poFPool->GetVector(i, fea);
-		NF[i] = (float *)malloc(sizeof(float) * (nMixtures + nMixtures * nDim));
-		r = compute_bw_stats(fea, n, pUbmData, NF[i]);
+		r = compute_bw_stats(fea, n, pUbmData, NF[1]);	
+		for (j = 0; j < nNFSize; ++j)
+			NF[0][j] += NF[1][j];
 	}
-	SAFE_FREE(fea);
-
-	double nStart = clock();
-
- 	TrainTVSpace(pUbmData, NF, nUttr, tv_dim, nIter, T);
-
-	double nEnd = clock();
-	printf("Training time : %.2f secs\n", (nEnd - nStart) / CLOCKS_PER_SEC);
-
-	nStart = clock();
-
-	for (i = 0; i < nUttr; ++i)
-	{
-		iv[i] = &iv_mem[i * tv_dim];
-		ExtractIVector(pUbmData, NF[i], tv_dim, T, iv[i]);
-	}
-
+	
 	nEnd = clock();
-	printf("Extract time : %.2f secs\n", (nEnd - nStart) / CLOCKS_PER_SEC);
+	SAFE_DELETE_ARR(fea);
+	printf("compute_bw_stats time : %.2f secs\n", (nEnd - nStart) / CLOCKS_PER_SEC);
+	
+	if (bTrainTv == TRUE)		
+	{
+		T = new double [nTvSize];
+		float *fT = new float [nTvSize];
 
-	// save ivector file
-	DumpIvBin(argv[4], (char*)iv_mem, sizeof(float) * tv_dim * nUttr, tv_dim, nUttr);
+		nStart = clock();
+		TrainTVSpace(pUbmData, NF, 1, tv_dim, nIter, T);
+		nEnd = clock();
+		printf("Training TV time : %.2f secs\n", (nEnd - nStart) / CLOCKS_PER_SEC);
 
+		for (i = 0; i < nTvSize; ++i)
+			fT[i] = (float)T[i];
+		
+		printf("Dump TV : %s\n", argv[4]);
+		if (DumpBin(argv[4], (char *)fT, sizeof(float) * nTvSize) <= 0)
+			PRINT(Dump TV failed !);
+
+		SAFE_DELETE_ARR(fT);
+	}
+	else
+	{
+		T = new double [nTvSize];
+		LoadTV(argv[4], T, nTvSize);
+
+		double *iv = new double [tv_dim];
+		float *fiv = new float [tv_dim];
+		
+		nStart = clock();
+		ExtractIVector(pUbmData, NF[0], tv_dim, T, iv);	
+		nEnd = clock();
+		printf("Extract time : %.2f secs\n", (nEnd - nStart) / CLOCKS_PER_SEC);
+
+		for (i = 0; i < tv_dim; ++i)
+			fiv[i] = (float)iv[i];
+
+		printf("Dump i-vector : %s\n", argv[6]);
+		if (DumpBin(argv[6], (char *)fiv, sizeof(float) * tv_dim) <= 0)
+			PRINT(Dump i-vector failed !);
+		
+		SAFE_DELETE_ARR(iv);
+		SAFE_DELETE_ARR(fiv);
+	}
 
 	ReleaseGmmData(pUbmData);
-	for (i = 0; i < nUttr; ++i)
-		SAFE_FREE(NF[i]);
-	SAFE_FREE(NF);
-	SAFE_FREE(iv_mem);
-	SAFE_FREE(iv);
-	SAFE_FREE(T);
+	SAFE_DELETE_ARR(NF[0]);
+	SAFE_DELETE_ARR(NF[1]);
+	SAFE_DELETE_ARR(NF);
+	SAFE_DELETE_ARR(T);
   	SAFE_DELETE(poFPool);
 	return 0;
 }

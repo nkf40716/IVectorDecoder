@@ -1,4 +1,4 @@
-#include <stdlib.h> 
+ #include <stdlib.h> 
 #include <stdio.h>
 #include "base_types.h"
 #include "IvDecoder.h"
@@ -89,15 +89,15 @@ void inv(float *X, int n, float *Y)
 // Input:  X == two dimensional array matrix
 //         n == order
 // Output: X
-void inv(float *X, int n)
+void inv(double *X, int n)
 {
 	int i, j, k;
-	static float a[100][200], t;
+	static double a[100][200], t;
 
 	if (n > 100) return;
 
     for(i = 0; i < n; i++)
-		memcpy(a[i], &X[i * n], sizeof(float) * n);
+		memcpy(a[i], &X[i * n], sizeof(double) * n);
    
 	for(i = 0; i < n; i++)
 	{
@@ -113,10 +113,12 @@ void inv(float *X, int n)
 	for(i = 0; i < n; i++)
 	{
 		t = a[i][i];
+
 		for(j = i; j < 2 * n; j++) {
 			a[i][j] = a[i][j] / t;
 			CHECK_FLT_LIMIT(a[i][j]);
 		}
+
 		for(j = 0; j < n; j++)
 		{
 			if(i != j)
@@ -131,5 +133,5 @@ void inv(float *X, int n)
 	}
 
     for(i = 0; i < n; i++)
-		memcpy(&X[i * n], &a[i][n], sizeof(float) * n);
+		memcpy(&X[i * n], &a[i][n], sizeof(double) * n);
 }
