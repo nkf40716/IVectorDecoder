@@ -63,23 +63,6 @@ static void pinv(double *a, int m, int n, double *X)
 
 	dsvd(ppa, m, n, w, v);
 
-	// swap for match the format in matlab
-// 	for (i = 0, j = m-1; i < (m >> 1); ++i, --j) {
-// 		t = w[i];
-// 		w[i] = w[j];
-// 		w[j] = t;
-// 	}
-// 	for (k = 0; k < n; ++k) {
-// 		for (i = 0, j = m-1; i < (m >> 1); ++i, --j) {
-// 			t = ppa[k][i];
-// 			ppa[k][i] = ppa[k][j];
-// 			ppa[k][j] = t;
-// 			t = v[k][i];
-// 			v[k][i] = v[k][j];
-// 			v[k][j] = t;
-// 		}
-// 	}
-
 	// norm(w, inf)
 	norm = (w[0] < 0) ? (-w[0]) : (w[0]);
 	for (i = 1; i < m; ++i) {
@@ -275,7 +258,6 @@ static int expectation_tv(double **T, double **N, double **F, float *S, int nFil
 #endif
 	}
 	
-
 	/*** maximization_tv ***/
 	idx = 0;
 	n = nGauss * nDim;	// n == RU num rows.
@@ -346,8 +328,8 @@ void TrainTVSpace(GMMDATA *pUbmData, double **NF, int nFile, int tv_dim, int nIt
 		sum_sigma += S[i];
 	}
 // 	sum_sigma /= m;
-	// 2017.5.2 note: 這個scale會影響到Train TV穩定度, Gauss越多要越小, 不然TV會越來越大.
-	while (sum_sigma > 0.1) sum_sigma /= 10;	
+	// 2017.5.5 note: 這個scale會影響到Train TV穩定度
+	while (sum_sigma > 0.01) sum_sigma /= 10;	
 
 	N = (double **)malloc(sizeof(double *) * nFile);
 	F = (double **)malloc(sizeof(double *) * nFile);
@@ -371,10 +353,6 @@ void TrainTVSpace(GMMDATA *pUbmData, double **NF, int nFile, int tv_dim, int nIt
 	srand((unsigned)time(NULL));
 	for (i = 0; i < n; ++i)
 		T[i] = randn(0, 1) * sum_sigma;
-
-// 	srand((unsigned)time(NULL));
-// 	for (i = 0; i < n; ++i)
-// 		T[i] = rand() * ((1.0 / RAND_MAX) * sum_sigma);
 
 // 	n /= tv_dim;
 // 	int nt = n / 2;

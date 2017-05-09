@@ -1,4 +1,4 @@
-/* 
+ /* 
  * svdcomp - SVD decomposition routine. 
  * Takes an mxn matrix a and decomposes it into udv, where u,v are
  * left and right orthogonal transformation matrices, and d is a 
@@ -31,7 +31,7 @@ static double PYTHAG(double a, double b)
 }
 
 
-int dsvd(float **a, int m, int n, float *w, float **v)
+int dsvd(double **a, int m, int n, double *w, double **v)
 {
     int flag, i, its, j, jj, k, l, nm;
     double c, f, h, s, x, y, z;
@@ -61,13 +61,13 @@ int dsvd(float **a, int m, int n, float *w, float **v)
             {
                 for (k = i; k < m; k++) 
                 {
-                    a[k][i] = (float)((double)a[k][i]/scale);
-                    s += ((double)a[k][i] * (double)a[k][i]);
+                    a[k][i] = a[k][i]/scale;
+                    s += (a[k][i] * a[k][i]);
                 }
-                f = (double)a[i][i];
+                f = a[i][i];
                 g = -SIGN(sqrt(s), f);
                 h = f * g - s;
-                a[i][i] = (float)(f - g);
+                a[i][i] = f - g;
                 if (i != n - 1) 
                 {
                     for (j = l; j < n; j++) 
@@ -76,32 +76,32 @@ int dsvd(float **a, int m, int n, float *w, float **v)
                             s += ((double)a[k][i] * (double)a[k][j]);
                         f = s / h;
                         for (k = i; k < m; k++) 
-                            a[k][j] += (float)(f * (double)a[k][i]);
+                            a[k][j] += f * (double)a[k][i];
                     }
                 }
                 for (k = i; k < m; k++) 
-                    a[k][i] = (float)((double)a[k][i]*scale);
+                    a[k][i] = a[k][i]*scale;
             }
         }
-        w[i] = (float)(scale * g);
+        w[i] = scale * g;
     
         /* right-hand reduction */
         g = s = scale = 0.0;
         if (i < m && i != n - 1) 
         {
             for (k = l; k < n; k++) 
-                scale += fabs((double)a[i][k]);
+                scale += fabs(a[i][k]);
             if (scale) 
             {
                 for (k = l; k < n; k++) 
                 {
-                    a[i][k] = (float)((double)a[i][k]/scale);
-                    s += ((double)a[i][k] * (double)a[i][k]);
+                    a[i][k] = a[i][k]/scale;
+                    s += a[i][k] * a[i][k];
                 }
-                f = (double)a[i][l];
+                f = a[i][l];
                 g = -SIGN(sqrt(s), f);
                 h = f * g - s;
-                a[i][l] = (float)(f - g);
+                a[i][l] = f - g;
                 for (k = l; k < n; k++) 
                     rv1[k] = (double)a[i][k] / h;
                 if (i != m - 1) 
@@ -111,11 +111,11 @@ int dsvd(float **a, int m, int n, float *w, float **v)
                         for (s = 0.0, k = l; k < n; k++) 
                             s += ((double)a[j][k] * (double)a[i][k]);
                         for (k = l; k < n; k++) 
-                            a[j][k] += (float)(s * rv1[k]);
+                            a[j][k] += (s * rv1[k]);
                     }
                 }
                 for (k = l; k < n; k++) 
-                    a[i][k] = (float)((double)a[i][k]*scale);
+                    a[i][k] = a[i][k]*scale;
             }
         }
         anorm = MAX(anorm, (fabs((double)w[i]) + fabs(rv1[i])));
@@ -129,14 +129,14 @@ int dsvd(float **a, int m, int n, float *w, float **v)
             if (g) 
             {
                 for (j = l; j < n; j++)
-                    v[j][i] = (float)(((double)a[i][j] / (double)a[i][l]) / g);
+                    v[j][i] = (a[i][j] / a[i][l]) / g;
                     /* double division to avoid underflow */
                 for (j = l; j < n; j++) 
                 {
                     for (s = 0.0, k = l; k < n; k++) 
                         s += ((double)a[i][k] * (double)v[k][j]);
                     for (k = l; k < n; k++) 
-                        v[k][j] += (float)(s * (double)v[k][i]);
+                        v[k][j] += s * v[k][i];
                 }
             }
             for (j = l; j < n; j++) 
@@ -166,11 +166,11 @@ int dsvd(float **a, int m, int n, float *w, float **v)
                         s += ((double)a[k][i] * (double)a[k][j]);
                     f = (s / (double)a[i][i]) * g;
                     for (k = i; k < m; k++) 
-                        a[k][j] += (float)(f * (double)a[k][i]);
+                        a[k][j] += f * a[k][i];
                 }
             }
             for (j = i; j < m; j++) 
-                a[j][i] = (float)((double)a[j][i]*g);
+                a[j][i] = a[j][i]*g;
         }
         else 
         {
@@ -208,16 +208,16 @@ int dsvd(float **a, int m, int n, float *w, float **v)
                     {
                         g = (double)w[i];
                         h = PYTHAG(f, g);
-                        w[i] = (float)h; 
+                        w[i] = h; 
                         h = 1.0 / h;
                         c = g * h;
                         s = (- f * h);
                         for (j = 0; j < m; j++) 
                         {
-                            y = (double)a[j][nm];
-                            z = (double)a[j][i];
-                            a[j][nm] = (float)(y * c + z * s);
-                            a[j][i] = (float)(z * c - y * s);
+                            y = a[j][nm];
+                            z = a[j][i];
+                            a[j][nm] = (y * c + z * s);
+                            a[j][i] = (z * c - y * s);
                         }
                     }
                 }
@@ -227,7 +227,7 @@ int dsvd(float **a, int m, int n, float *w, float **v)
             {                  /* convergence */
                 if (z < 0.0) 
                 {              /* make singular value nonnegative */
-                    w[k] = (float)(-z);
+                    w[k] = -z;
                     for (j = 0; j < n; j++) 
                         v[j][k] = (-v[j][k]);
                 }
@@ -270,11 +270,11 @@ int dsvd(float **a, int m, int n, float *w, float **v)
                 {
                     x = (double)v[jj][j];
                     z = (double)v[jj][i];
-                    v[jj][j] = (float)(x * c + z * s);
-                    v[jj][i] = (float)(z * c - x * s);
+                    v[jj][j] = (x * c + z * s);
+                    v[jj][i] = (z * c - x * s);
                 }
                 z = PYTHAG(f, h);
-                w[j] = (float)z;
+                w[j] = z;
                 if (z) 
                 {
                     z = 1.0 / z;
@@ -287,13 +287,13 @@ int dsvd(float **a, int m, int n, float *w, float **v)
                 {
                     y = (double)a[jj][j];
                     z = (double)a[jj][i];
-                    a[jj][j] = (float)(y * c + z * s);
-                    a[jj][i] = (float)(z * c - y * s);
+                    a[jj][j] = (y * c + z * s);
+                    a[jj][i] = (z * c - y * s);
                 }
             }
             rv1[l] = 0.0;
             rv1[k] = f;
-            w[k] = (float)x;
+            w[k] = x;
         }
     }
     free((void*) rv1);
